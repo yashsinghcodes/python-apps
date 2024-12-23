@@ -1,9 +1,9 @@
 #!/bin/sh
-docker stop frikky/shuffle:thehive_1.0.0 --force
-docker rm   frikky/shuffle:thehive_1.0.0 --force
-docker rmi  frikky/shuffle:thehive_1.0.0 --force
+docker stop frikky/shuffle:testing_1.0.0 --force
+docker rm   frikky/shuffle:testing_1.0.0 --force
+docker rmi  frikky/shuffle:testing_1.0.0 --force
 
-docker build . -t frikky/shuffle:thehive_1.0.0
+docker build . -t frikky/shuffle:testing_1.0.0
 
 echo "RUNNING!\n\n"
 docker run \
@@ -12,6 +12,6 @@ docker run \
 	--env FUNCTION_APIKEY="asdasd" \
 	--env EXECUTIONID="2349bf96-51ad-68d2-5ca6-75ef8f7ee814" \
 	--env AUTHORIZATION="8e344a2e-db51-448f-804c-eb959a32c139" \
-	frikky/shuffle:thehive_1.0.0
+	frikky/shuffle:testing_1.0.0
 
-docker push frikky/shuffle:thehive_1.0.0
+docker push frikky/shuffle:testing_1.0.0

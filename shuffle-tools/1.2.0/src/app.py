@@ -38,6 +38,7 @@ import concurrent.futures
 import multiprocessing
 
 from walkoff_app_sdk.app_base import AppBase
+#from shuffle_sdk import AppBase
 
 class Tools(AppBase):
     __version__ = "1.2.0"
@@ -2787,7 +2788,32 @@ class Tools(AppBase):
         }
 
         return returnvalue
-    
+
+    def switch(self, conditions):
+        # Check if conditions is a list or not
+        if not isinstance(conditions, list):
+            conditions = [conditions]
+
+        # True by default
+        to_return = {
+            "success": True,
+            "run_else": True,
+        }
+
+        if len(conditions) == 0:
+            conditions = []
+
+        for condition in conditions:
+            pass
+
+        # Loop conditions
+        # Return them without a loop to make it EASY to understand
+        # Validation should be: 
+        # Continuation based on .id.valid
+        # .valid -> true/false
+        # If no id exists, use name?
+
+        return to_return
 
 if __name__ == "__main__":
     Tools.run()
