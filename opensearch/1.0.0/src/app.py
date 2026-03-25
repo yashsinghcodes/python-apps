@@ -1,7 +1,9 @@
 import ast
 import json
+import os
 import tempfile
 import requests
+import urllib3
 
 from shuffle_sdk import AppBase
 
@@ -54,7 +56,9 @@ class OpenSearch(AppBase):
         return data
 
     def _write_temp_file(self, data, suffix):
-        tmp = tempfile.NamedTemporaryFile(delete=False, prefix="shuffle_opensearch_", suffix=suffix)
+        tmp = tempfile.NamedTemporaryFile(
+            delete=False, prefix="shuffle_opensearch_", suffix=suffix
+        )
         tmp.write(data)
         tmp.flush()
         tmp.close()
@@ -63,9 +67,42 @@ class OpenSearch(AppBase):
     def _load_file_or_value(self, value, suffix):
         if not value:
             return None
+
+        if isinstance(value, list):
+            if len(value) == 0:
+                return None
+            value = value[0]
+
+        if isinstance(value, dict):
+            if value.get("success") is False and not value.get("data"):
+                raise ValueError("Failed to read file from Shuffle")
+            if "data" in value:
+                data = value["data"]
+                if isinstance(data, str):
+                    data = data.encode("utf-8")
+                return self._write_temp_file(data, suffix)
+            if "file_id" in value:
+                value = value["file_id"]
+            elif "id" in value:
+                value = value["id"]
+            else:
+                raise ValueError("Invalid file input from Shuffle")
+        if isinstance(value, bytes):
+            return self._write_temp_file(value, suffix)
+
+        if isinstance(value, str) and os.path.isfile(value):
+            return value
+
         if isinstance(value, str) and "-----BEGIN" in value:
             return self._write_temp_file(value.encode("utf-8"), suffix)
+
         filedata = self.get_file(value)
+
+        if isinstance(filedata, list):
+            if len(filedata) == 0:
+                raise ValueError("Failed to read file from Shuffle")
+            filedata = filedata[0]
+
         if not filedata or not filedata.get("success"):
             raise ValueError("Failed to read file from Shuffle")
         return self._write_temp_file(filedata["data"], suffix)
@@ -97,17 +134,35 @@ class OpenSearch(AppBase):
         params=None,
         body=None,
         timeout=30,
+        **kwargs,
     ):
         base_url = self._normalize_base_url(base_url)
+
+        if not path.startswith("/"):
+            path = f"/{path}"
+
         url = f"{base_url}{path}"
 
-        cert_path = self._load_file_or_value(client_cert, "_client_cert.pem") if client_cert else None
-        key_path = self._load_file_or_value(client_key, "_client_key.pem") if client_key else None
+        username = kwargs.get("username")
+        password = kwargs.get("password")
+        api_key = kwargs.get("api_key")
+
+        cert_path = (
+            self._load_file_or_value(client_cert, "_client_cert.pem")
+            if client_cert
+            else None
+        )
+        key_path = (
+            self._load_file_or_value(client_key, "_client_key.pem")
+            if client_key
+            else None
+        )
         ca_path = self._load_file_or_value(ca_cert, "_ca_cert.pem") if ca_cert else None
 
         verify_flag = self._to_bool(verify, True)
         if not verify_flag:
             verify_value = False
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         elif ca_path:
             verify_value = ca_path
         else:
@@ -127,7 +182,18 @@ class OpenSearch(AppBase):
             timeout = 30
 
         parsed_body = self._parse_json_input(body)
-        request_headers = headers or {}
+        request_headers = dict(headers or {})
+
+        if api_key and "Authorization" not in request_headers:
+            api_key = str(api_key).strip()
+            if api_key.startswith("ApiKey ") or api_key.startswith("Bearer "):
+                request_headers["Authorization"] = api_key
+            else:
+                request_headers["Authorization"] = f"ApiKey {api_key}"
+
+        auth_value = None
+        if username or password:
+            auth_value = (str(username or ""), str(password or ""))
 
         request_kwargs = {
             "method": method,
@@ -138,6 +204,9 @@ class OpenSearch(AppBase):
             "timeout": timeout,
         }
 
+        if auth_value:
+            request_kwargs["auth"] = auth_value
+
         if cert_value:
             request_kwargs["cert"] = cert_value
 
@@ -146,10 +215,28 @@ class OpenSearch(AppBase):
         elif parsed_body is not None:
             request_kwargs["data"] = parsed_body
 
-        response = requests.request(**request_kwargs)
-        return self._format_response(response)
+        try:
+            response = requests.request(**request_kwargs)
+            return self._format_response(response)
+        except requests.exceptions.RequestException as err:
+            return {
+                "status": 0,
+                "body": {"success": False, "reason": str(err)},
+                "headers": {},
+                "url": url,
+                "success": False,
+            }
 
-    def cluster_health(self, base_url, client_cert, client_key, ca_cert=None, verify=True, timeout=30):
+    def cluster_health(
+        self,
+        base_url,
+        client_cert=None,
+        client_key=None,
+        ca_cert=None,
+        verify=True,
+        timeout=30,
+        **kwargs,
+    ):
         return self._request(
             "GET",
             "/_cluster/health",
@@ -159,9 +246,19 @@ class OpenSearch(AppBase):
             ca_cert=ca_cert,
             verify=verify,
             timeout=timeout,
+            **kwargs,
         )
 
-    def list_indices(self, base_url, client_cert, client_key, ca_cert=None, verify=True, timeout=30):
+    def list_indices(
+        self,
+        base_url,
+        client_cert=None,
+        client_key=None,
+        ca_cert=None,
+        verify=True,
+        timeout=30,
+        **kwargs,
+    ):
         params = {"format": "json"}
         return self._request(
             "GET",
@@ -173,9 +270,20 @@ class OpenSearch(AppBase):
             verify=verify,
             params=params,
             timeout=timeout,
+            **kwargs,
         )
 
-    def get_index(self, index, base_url, client_cert, client_key, ca_cert=None, verify=True, timeout=30):
+    def get_index(
+        self,
+        index,
+        base_url,
+        client_cert=None,
+        client_key=None,
+        ca_cert=None,
+        verify=True,
+        timeout=30,
+        **kwargs,
+    ):
         return self._request(
             "GET",
             f"/{index}",
@@ -185,9 +293,21 @@ class OpenSearch(AppBase):
             ca_cert=ca_cert,
             verify=verify,
             timeout=timeout,
+            **kwargs,
         )
 
-    def create_index(self, index, body, base_url, client_cert, client_key, ca_cert=None, verify=True, timeout=30):
+    def create_index(
+        self,
+        index,
+        body,
+        base_url,
+        client_cert=None,
+        client_key=None,
+        ca_cert=None,
+        verify=True,
+        timeout=30,
+        **kwargs,
+    ):
         return self._request(
             "PUT",
             f"/{index}",
@@ -198,9 +318,20 @@ class OpenSearch(AppBase):
             verify=verify,
             body=body,
             timeout=timeout,
+            **kwargs,
         )
 
-    def delete_index(self, index, base_url, client_cert, client_key, ca_cert=None, verify=True, timeout=30):
+    def delete_index(
+        self,
+        index,
+        base_url,
+        client_cert=None,
+        client_key=None,
+        ca_cert=None,
+        verify=True,
+        timeout=30,
+        **kwargs,
+    ):
         return self._request(
             "DELETE",
             f"/{index}",
@@ -210,6 +341,7 @@ class OpenSearch(AppBase):
             ca_cert=ca_cert,
             verify=verify,
             timeout=timeout,
+            **kwargs,
         )
 
     def index_document(
@@ -219,11 +351,12 @@ class OpenSearch(AppBase):
         body,
         refresh,
         base_url,
-        client_cert,
-        client_key,
+        client_cert=None,
+        client_key=None,
         ca_cert=None,
         verify=True,
         timeout=30,
+        **kwargs,
     ):
         params = {}
         if refresh:
@@ -239,6 +372,7 @@ class OpenSearch(AppBase):
             params=params,
             body=body,
             timeout=timeout,
+            **kwargs,
         )
 
     def create_document(
@@ -247,11 +381,12 @@ class OpenSearch(AppBase):
         body,
         refresh,
         base_url,
-        client_cert,
-        client_key,
+        client_cert=None,
+        client_key=None,
         ca_cert=None,
         verify=True,
         timeout=30,
+        **kwargs,
     ):
         params = {}
         if refresh:
@@ -267,6 +402,7 @@ class OpenSearch(AppBase):
             params=params,
             body=body,
             timeout=timeout,
+            **kwargs,
         )
 
     def get_document(
@@ -274,11 +410,12 @@ class OpenSearch(AppBase):
         index,
         document_id,
         base_url,
-        client_cert,
-        client_key,
+        client_cert=None,
+        client_key=None,
         ca_cert=None,
         verify=True,
         timeout=30,
+        **kwargs,
     ):
         return self._request(
             "GET",
@@ -289,6 +426,7 @@ class OpenSearch(AppBase):
             ca_cert=ca_cert,
             verify=verify,
             timeout=timeout,
+            **kwargs,
         )
 
     def update_document(
@@ -298,11 +436,12 @@ class OpenSearch(AppBase):
         body,
         refresh,
         base_url,
-        client_cert,
-        client_key,
+        client_cert=None,
+        client_key=None,
         ca_cert=None,
         verify=True,
         timeout=30,
+        **kwargs,
     ):
         params = {}
         if refresh:
@@ -318,6 +457,7 @@ class OpenSearch(AppBase):
             params=params,
             body=body,
             timeout=timeout,
+            **kwargs,
         )
 
     def delete_document(
@@ -326,11 +466,12 @@ class OpenSearch(AppBase):
         document_id,
         refresh,
         base_url,
-        client_cert,
-        client_key,
+        client_cert=None,
+        client_key=None,
         ca_cert=None,
         verify=True,
         timeout=30,
+        **kwargs,
     ):
         params = {}
         if refresh:
@@ -345,6 +486,7 @@ class OpenSearch(AppBase):
             verify=verify,
             params=params,
             timeout=timeout,
+            **kwargs,
         )
 
     def search(
@@ -353,11 +495,12 @@ class OpenSearch(AppBase):
         query_body,
         query_string,
         base_url,
-        client_cert,
-        client_key,
+        client_cert=None,
+        client_key=None,
         ca_cert=None,
         verify=True,
         timeout=30,
+        **kwargs,
     ):
         params = {}
         if query_string:
@@ -374,6 +517,7 @@ class OpenSearch(AppBase):
                 params=params,
                 body=query_body,
                 timeout=timeout,
+                **kwargs,
             )
         return self._request(
             "GET",
@@ -385,6 +529,7 @@ class OpenSearch(AppBase):
             verify=verify,
             params=params,
             timeout=timeout,
+            **kwargs,
         )
 
     def bulk(
@@ -392,11 +537,12 @@ class OpenSearch(AppBase):
         payload,
         refresh,
         base_url,
-        client_cert,
-        client_key,
+        client_cert=None,
+        client_key=None,
         ca_cert=None,
         verify=True,
         timeout=30,
+        **kwargs,
     ):
         params = {}
         if refresh:
@@ -414,6 +560,7 @@ class OpenSearch(AppBase):
             body=payload,
             headers=headers,
             timeout=timeout,
+            **kwargs,
         )
 
     def raw_request(
@@ -424,11 +571,12 @@ class OpenSearch(AppBase):
         headers,
         params,
         base_url,
-        client_cert,
-        client_key,
+        client_cert=None,
+        client_key=None,
         ca_cert=None,
         verify=True,
         timeout=30,
+        **kwargs,
     ):
         parsed_headers = {}
         parsed_params = {}
@@ -452,6 +600,7 @@ class OpenSearch(AppBase):
             params=parsed_params,
             body=body,
             timeout=timeout,
+            **kwargs,
         )
 
 

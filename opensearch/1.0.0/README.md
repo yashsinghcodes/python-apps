@@ -1,21 +1,32 @@
 # OpenSearch
 
-OpenSearch Shuffle app using mutual TLS (client certificate) authentication.
+OpenSearch Shuffle app with mTLS, basic auth, and API key support.
 
 ## Authentication
 
-Configure the following in the app authentication section:
+Configure `base_url` and one of these authentication modes:
+
+1. mTLS
+- `client_cert`: client certificate (Shuffle file ID, local file path, or inline PEM).
+- `client_key`: client private key (Shuffle file ID, local file path, or inline PEM).
+
+2. Basic auth
+- `username`
+- `password`
+
+3. API key
+- `api_key` (raw key or full `ApiKey ...` header value)
+
+TLS options:
 
 - `base_url`: OpenSearch base URL (e.g. `https://opensearch.example.com:9200`).
-- `client_cert`: Client certificate (PEM) file ID.
-- `client_key`: Client private key (PEM) file ID.
-- `ca_cert` (optional): CA certificate (PEM) file ID used for TLS verification.
+- `ca_cert` (optional): CA certificate (Shuffle file ID, local file path, or inline PEM).
 - `verify` (optional): `true` or `false`.
 - `timeout` (optional): Request timeout in seconds.
 
 Notes:
-- If your client certificate file already contains the private key, upload the same file for both `client_cert` and `client_key`.
 - If `verify` is `true` and `ca_cert` is provided, the CA cert is used for TLS verification.
+- For mTLS with a combined PEM file, upload the same file in both `client_cert` and `client_key`.
 
 ## Actions
 

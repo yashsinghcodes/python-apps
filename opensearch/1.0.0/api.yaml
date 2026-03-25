@@ -18,23 +18,41 @@ authentication:
       schema:
         type: string
     - name: client_cert
-      description: Client certificate file ID (PEM). If your cert contains the key, upload the same file for client_key.
+      description: Client certificate for mTLS. Supports Shuffle file ID, local file path, or inline PEM.
       example: "adf5e3d0fd85633be17004735a0a119e"
-      required: true
+      required: false
       schema:
         type: file
     - name: client_key
-      description: Client private key file ID (PEM).
+      description: Client private key for mTLS. Supports Shuffle file ID, local file path, or inline PEM.
       example: "9a1b2c3d4e5f67890123456789abcdef"
-      required: true
+      required: false
       schema:
         type: file
     - name: ca_cert
-      description: CA certificate file ID (PEM) for TLS verification.
+      description: CA certificate for TLS verification. Supports Shuffle file ID, local file path, or inline PEM.
       example: "0f91affa651ff09f4e7b0c3d2a1b9c8d"
       required: false
       schema:
         type: file
+    - name: username
+      description: OpenSearch username for basic authentication.
+      example: "admin"
+      required: false
+      schema:
+        type: string
+    - name: password
+      description: OpenSearch password for basic authentication.
+      example: "StrongPassword123!"
+      required: false
+      schema:
+        type: string
+    - name: api_key
+      description: OpenSearch API key value. Pass either full header value or raw key.
+      example: "Rk9POkJBUg=="
+      required: false
+      schema:
+        type: string
     - name: verify
       description: Verify TLS certificates. Use false to disable verification.
       example: "true"
