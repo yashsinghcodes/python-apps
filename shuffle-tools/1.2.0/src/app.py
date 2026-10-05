@@ -191,7 +191,9 @@ class Tools(AppBase):
 
         data = {"numbers": targets, "body": body}
 
-        url = "https://shuffler.io/api/v1/functions/sendsms"
+        # this is just to expose this feature to onprem users as well
+        base = self.url if "shuffler.io" in self.url or "run.app" in self.url else "https://shuffler.io"
+        url = "%s/api/v1/functions/sendsms" % base
         headers = {"Authorization": "Bearer %s" % apikey}
         return requests.post(url, headers=headers, json=data, verify=False).text
 
@@ -226,7 +228,9 @@ class Tools(AppBase):
             except Exception as e:
                 pass
 
-        url = "https://shuffler.io/functions/sendmail"
+        # this is just to expose this feature to onprem users as well
+        base = self.url if "shuffler.io" in self.url or "run.app" in self.url else "https://shuffler.io"
+        url = "%s/functions/sendmail" % base
         headers = {"Authorization": "Bearer %s" % apikey}
         return requests.post(url, headers=headers, json=data).text
 
@@ -1897,7 +1901,7 @@ class Tools(AppBase):
     def check_datastore_contains(
         self, key, value, append, category="", return_values="true"
     ):
-        return check_cache_contains(self, key, value, append, category, return_values)
+        return self.check_cache_contains(self, key, value, append, category=category, return_values=return_values)
 
     def check_cache_contains(
         self, key, value, append, category="", return_values="true"
@@ -2222,6 +2226,26 @@ class Tools(AppBase):
             self.logger.info("Value couldn't be parsed")
             return response.text
 
+    def list_datastore_category(self, category, output_type=""):
+        category = category.lower().replace(" ", "_")
+        if not output_type: 
+            output_type = "values"
+
+        org_id = self.full_execution["workflow"]["execution_org"]["id"]
+        url = "%s/api/v2/datastore/category/%s?top=10000&type=%s&execution_id=%s&authorization=%s&org_id=%s" % (self.url, category, output_type, self.current_execution_id, self.authorization, org_id)
+
+        parsed_headers = {}
+        data = requests.get(url, headers=parsed_headers, verify=False)
+        try:
+            allvalues = data.json()
+            return json.dumps(allvalues)
+        except Exception as e:
+            return {
+                "success": False,
+                "reason": f"Failed to parse datastore category list response: {e}",
+                "response": data.text,
+            }
+
     def delete_datastore_value(self, key, category=""):
         return self.delete_cache(key, category=category)
 
@@ -2328,8 +2352,6 @@ class Tools(AppBase):
             self.logger.info("Value couldn't be parsed, or json dump of value failed")
             return value.text
 
-    def set_datastore_value(self, key, value, category=""):
-        return set_cache_value(self, key, value, category=category)
 
     # Check if a specific key exists in a datastore category or not
     # Otherwise appends it automatically
@@ -2506,6 +2528,9 @@ class Tools(AppBase):
         except:
             self.logger.info("Value couldn't be parsed")
             return response.text
+
+    def set_datastore_value(self, key, value, category=""):
+        return self.set_cache_value(key, value, category=category)
 
     def convert_json_to_tags(
         self, json_object, split_value=", ", include_key=True, lowercase=True

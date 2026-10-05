@@ -26,7 +26,7 @@ actions:
       schema:
         type: string
   - name: execute_python
-    description: Runs python with the data input. Any prints will be returned.
+    description: Runs python with the data input. Any prints will be returned. Avoid __main__ as it is not supported in this environment. 
     parameters:
       - name: code
         description: The code to run. Can be a file ID from within Shuffle.
@@ -76,6 +76,32 @@ actions:
         required: false 
         multiline: false
         example: "tickets"
+        schema:
+          type: string
+    returns:
+      schema:
+        type: string
+
+  - name: list_datastore_category
+    description: Lists data in the datastore category specified. 
+    parameters:
+      - name: category 
+        description: The category to list 
+        required: true
+        multiline: false
+        example: "shuffle-security_incidents"
+        schema:
+          type: string
+      - name: output_type 
+        description: The output type to get
+        required: false 
+        options:
+          - values 
+          - keys
+          - ndjson
+          - csv 
+          - meta 
+        example: "values"
         schema:
           type: string
     returns:
